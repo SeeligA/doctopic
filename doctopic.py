@@ -106,6 +106,7 @@ def iter_documents(top_directory):
         for file in filter(lambda file: file.endswith('.txt'), files): # TODO: Add filter for PDF files
             with open(os.path.join(root, file), 'rb') as document:
                 document = document.read() # read the entire document, as one big string
+                logging.info(file)
                 yield tokenize(document) # or whatever tokenization suits you
 
 

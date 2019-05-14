@@ -7,10 +7,11 @@ from PyQt5 import QtCore
 
 from PyQt5.QtGui import QIcon
 import os.path
-from doctopic import MyCorpus, load_from_folder, file_to_query
+from doctopic import MyCorpus, load_from_folder, file_to_query, build_index
 #from GUI.restore import guisave, guirestore
 import logging
 import tempfile
+from shutil import copy2
 
 TEMP_FOLDER = tempfile.gettempdir()
 
@@ -71,14 +72,17 @@ class MyWindow(QMainWindow):
                 w.textOutput.setText('UnboundLocalError: Unable to find local variable')
                 return
 
-        vec_bow = file_to_query(w.input_line_edit_doc.text(), w.dictionary)
-        vec_lsi = w.model[vec_bow]
-        sims_lsi = w.index[vec_lsi]
-        sims_lsi = sorted(enumerate(sims_lsi), key=lambda item: -item[1])
+        if os.path.isfile(w.input_line_edit_doc.text()):
+            vec_bow = file_to_query(w.input_line_edit_doc.text(), w.dictionary)
+            vec_lsi = w.model[vec_bow]
+            sims_lsi = w.index[vec_lsi]
+            sims_lsi = sorted(enumerate(sims_lsi), key=lambda item: -item[1])
 
-        topic = w.model.print_topic(max(vec_lsi, key=lambda item: abs(item[1]))[0])
+            topic = w.model.print_topic(max(vec_lsi, key=lambda item: abs(item[1]))[0])
 
-        w.print_details(sims_lsi, topic)
+            w.print_details(sims_lsi, topic)
+        else:
+            w.textOutput.setText('Please select a valid file')
 
     def print_details(self, sims, topic):
         '''Print query results to text output'''
@@ -100,7 +104,32 @@ class MyWindow(QMainWindow):
     def reset_model(self):
         '''Delete attribute when changing the project folder'''
         logging.info('Reset model')
-        del w.model
+        if hasattr(w, 'model'):
+            del w.model
+
+
+    def train_model(self):
+        if os.path.isdir(w.input_line_edit_doc.text()):
+            corpus = MyCorpus(w.input_line_edit_doc.text())
+            _ = corpus.save_to_temp()
+            _ = corpus.get_labels()
+
+            tfidf, corpus_tfidf, lsi, corpus_lsi = corpus.build_lsi(topics=250)
+            index_lsi = build_index(list(corpus_lsi))
+            w.textOutput_train.setText('Training complete!')
+
+        else:
+            w.textOutput_train.setText('Please select a valid folder')
+
+    def save_model(self):
+        src = TEMP_FOLDER
+        dst = w.input_line_edit_project.text()
+        files = ['tmp.index', 'tmp.lsi', 'tmp.lsi.projection', 'tmp.dict', 'tmp.json']
+        for file in files:
+            copy2(os.path.join(src, file), os.path.join(dst, file))
+            logging.info('Copying {} to {}'.format(file, dst))
+        w.textOutput_train.append('Files saved')
+
 
 if __name__ == '__main__':
 
@@ -112,6 +141,8 @@ if __name__ == '__main__':
     w.actionOpen_Project.triggered.connect(MyWindow.open_project)
     w.actionExit.triggered.connect(qApp.quit)
     w.input_line_edit_project.textChanged.connect(MyWindow.reset_model)
+    w.train_model_button.clicked.connect(MyWindow.train_model)
+    w.save_project_button.clicked.connect(MyWindow.save_model)
 
 
     sys.exit(app.exec_())
