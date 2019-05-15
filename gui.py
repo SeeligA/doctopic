@@ -65,41 +65,66 @@ class MyWindow(QMainWindow):
         if hasattr(w, 'model'):
             pass
         else:
-            w.model, w.dictionary, w.index, w.labels = load_from_folder(w.input_line_edit_project.text())
+            w.model, w.dictionary, w.tfidf, w.sparse_index, w.index, w.labels = load_from_folder(w.input_line_edit_project.text())
 
-            if all((w.model, w.dictionary, w.index, w.labels)) == False:
+            if all((w.model, w.dictionary, w.tfidf, w.sparse_index, w.index, w.labels)) == False:
                 logging.info('UnboundLocalError: Unable to find local variable')
                 w.textOutput.setText('UnboundLocalError: Unable to find local variable')
                 return
 
         if os.path.isfile(w.input_line_edit_doc.text()):
             vec_bow = file_to_query(w.input_line_edit_doc.text(), w.dictionary)
-            vec_lsi = w.model[vec_bow]
+            vec_lsi = w.model[w.tfidf[vec_bow]]
             sims_lsi = w.index[vec_lsi]
             sims_lsi = sorted(enumerate(sims_lsi), key=lambda item: -item[1])
 
             topic = w.model.print_topic(max(vec_lsi, key=lambda item: abs(item[1]))[0])
+            #doc_topics, word_topics, phi_values, = model.get_document_topics(vec_bow, per_word_topics=True)
 
-            w.print_details(sims_lsi, topic)
+            sims_tfidf = w.sparse_index[w.tfidf[vec_bow]]
+            sims_tfidf = sorted(enumerate(sims_tfidf), key=lambda item: -item[1])
+
+            w.print_details(sims_lsi, sims_tfidf, topic)
         else:
             w.textOutput.setText('Please select a valid file')
 
-    def print_details(self, sims, topic):
+    def formatting_helper(secions):
+
+        len_line = 120
+        dashed = []
+        for section in sections:
+            filler = '-' * ((len_line - len(section)) / 2)
+            dashed.append(filler, section, filler)
+        return dashed
+
+    def print_details(self, sims, sims_tfidf, topic):
         '''Print query results to text output'''
-        dash = '-' * 119
+        sections = [' LSI Similarity ', ' Most Prominent LSI topic ', ' tf-idf Similarity ']
+        line = 120
 
-        self.textOutput.setText(dash)
+        self.textOutput.setText('{:-{align}{width}}'.format(sections[0], align='^', width=line))
         self.textOutput.append('{:<5s}{:>8s}{:>12}{:>12s}'.format('RANK', 'SIM', 'CLIENT', 'FILE'))
-        self.textOutput.append(dash)
-
-        for i in range(10):
+        self.textOutput.append('{:-{align}{width}}'.format('', align='^', width=line))
+        #
+        for i in range(min(len(sims), 10)):
             labels = w.labels[str(sims[i][0])]
-            self.textOutput.append('{:^10}{:.4}\t{:>12.7}\t{:<12s}'.format(i+1, sims[i][1], labels[0], labels[1]))
+            self.textOutput.append('{:<10d}{: 8.3f}\t{:>12.7}\t{:<12s}'.format(i+1, sims[i][1], labels[0], labels[1]))
 
         self.textOutput.append('\n')
-        self.textOutput.append('{} Most Prominent LSI topic {}'.format('-'*43,'-'*43))
+        self.textOutput.append('{:-{align}{width}}'.format(sections[1], align='^', width=line))
         self.textOutput.append(topic)
-        self.textOutput.append(dash)
+
+
+        self.textOutput.append('\n')
+        self.textOutput.append('{:-{align}{width}}'.format(sections[2], align='^', width=line))
+        self.textOutput.append('{:<5s}{:>8s}{:>12}{:>12s}'.format('RANK', 'SIM', 'CLIENT', 'FILE'))
+        self.textOutput.append('{:-{align}{width}}'.format('', align='^', width=line))
+
+        for i in range(min(len(sims_tfidf), 10)):
+            labels = w.labels[str(sims_tfidf[i][0])]
+            self.textOutput.append('{:<10d}{: 8.3f}\t{:>12.7}\t{:<12s}'.format(i+1, sims_tfidf[i][1], labels[0], labels[1]))
+
+
 
     def reset_model(self):
         '''Delete attribute when changing the project folder'''
@@ -116,6 +141,7 @@ class MyWindow(QMainWindow):
 
             tfidf, corpus_tfidf, lsi, corpus_lsi = corpus.build_lsi(topics=250)
             index_lsi = build_index(list(corpus_lsi))
+            index_tfidf = build_index(list(corpus_tfidf), len(corpus.dictionary))
             w.textOutput_train.setText('Training complete!')
 
         else:
@@ -124,7 +150,13 @@ class MyWindow(QMainWindow):
     def save_model(self):
         src = TEMP_FOLDER
         dst = w.input_line_edit_project.text()
-        files = ['tmp.index', 'tmp.lsi', 'tmp.lsi.projection', 'tmp.dict', 'tmp.json']
+        files = ['sparse.index',
+                 'tmp.index',
+                 'tmp.lsi',
+                 'tmp.tfidf',
+                 'tmp.lsi.projection',
+                 'tmp.dict',
+                 'tmp.json']
         for file in files:
             copy2(os.path.join(src, file), os.path.join(dst, file))
             logging.info('Copying {} to {}'.format(file, dst))

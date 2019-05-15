@@ -81,12 +81,18 @@ class MyCorpus(object):
         lsi.save(os.path.join(TEMP_FOLDER, 'train.lsi'))
         return lsi, trained_lsi
 
+def build_index(corpus, num_features=False):
 
+    if num_features:
+        index = similarities.SparseMatrixSimilarity(corpus, num_features=num_features)
+        index.save(os.path.join(TEMP_FOLDER, 'sparse.index'))
 
-def build_index(corpus):
-    index = similarities.MatrixSimilarity(corpus) # TODO: include option to specify num_best
-    index.save(os.path.join(TEMP_FOLDER, 'tmp.index'))
+    else:
+        index = similarities.MatrixSimilarity(corpus) # TODO: include option to specify num_best
+        index.save(os.path.join(TEMP_FOLDER, 'tmp.index'))
+
     return index
+
 
 def file_to_query(filepath, dictionary):
     '''Generate BOW vector from document for querying
@@ -112,20 +118,24 @@ def iter_documents(top_directory):
 
 def load_from_folder(folder):
 
-    model, dictionary, index, labels = None, None, None, None
+    model, dictionary, tfidf, sparse_index, index, labels = None, None, None, None, None, None
     for file in os.listdir(folder):
         logging.info('Scanning: {}'.format(file))
 
         if file.endswith('.lsi'):
             model = models.LsiModel.load(os.path.join(folder, file))
+        elif file.endswith('.tfidf'):
+            tfidf = models.TfidfModel.load(os.path.join(folder, file))
         elif file.endswith('.dict'):
             dictionary = corpora.Dictionary.load(os.path.join(folder, file))
-        elif file.endswith('.index'):
+        elif file.endswith('sparse.index'):
+            sparse_index = similarities.SparseMatrixSimilarity.load(os.path.join(folder, file))
+        elif file.endswith('tmp.index'):
             index = similarities.MatrixSimilarity.load(os.path.join(folder, file))
         elif file.endswith('.json'):
             labels = load_labels(os.path.join(folder, file))
 
-    return model, dictionary, index, labels
+    return model, dictionary, tfidf, sparse_index, index, labels
 
 
 
