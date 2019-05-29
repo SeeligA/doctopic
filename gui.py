@@ -22,11 +22,11 @@ class MyWindow(QMainWindow):
         self.settings = QtCore.QSettings("DocFirm Inc.", "docfind")
         # Retrieve user input from settings
         save_folder = self.settings.value("savedFolder", "")
-        self.input_line_edit_project.setText(save_folder)
+        self.input_line_edit_model.setText(save_folder)
         save_doc = self.settings.value("savedDoc", "")
         self.input_line_edit_doc.setText(save_doc)
         # Write new user input to settings
-        self.input_line_edit_project.textChanged.connect(self.new_folder_changed)
+        self.input_line_edit_model.textChanged.connect(self.new_folder_changed)
         self.input_line_edit_doc.textChanged.connect(self.new_doc_changed)
 
     def initUI(self):
@@ -40,16 +40,16 @@ class MyWindow(QMainWindow):
 
     def new_folder_changed(self, newFolder):
         """Store dirpath to settings"""
-        self.settings.setValue("savedFolder", w.input_line_edit_project.text())
+        self.settings.setValue("savedFolder", w.input_line_edit_model.text())
 
     def new_doc_changed(self, newDoc):
         """Store filepath to settings"""
         self.settings.setValue("savedDoc", w.input_line_edit_doc.text())
 
-    def open_project(self):
+    def open_model(self):
         """Open file dialog and write dirpath to line edit."""
         dirpath = QFileDialog.getExistingDirectory()
-        w.input_line_edit_project.setText(dirpath)
+        w.input_line_edit_model.setText(dirpath)
 
     def open_doc(self):
         """Open file dialog and write filepath to line edit."""
@@ -62,10 +62,10 @@ class MyWindow(QMainWindow):
         # Check if a model has been already loaded
         if hasattr(w, 'model'):
             pass
-        # Load relevant files from project directory
+        # Load relevant files from model directory
         else:
             w.model, w.dictionary, w.tfidf, w.sparse_index, w.index, w.labels = load_from_folder(
-                w.input_line_edit_project.text())
+                w.input_line_edit_model.text())
             # Abort query if one or more files are missing
             if all((w.model, w.dictionary, w.tfidf, w.sparse_index, w.index, w.labels)) == False:
                 logging.info('UnboundLocalError: Unable to find local variable')
@@ -97,15 +97,16 @@ class MyWindow(QMainWindow):
         """Print query results to text output."""
 
         sections = [' LSI Similarity ', ' Most Prominent LSI topic ', ' tf-idf Similarity ']
+        headers = '{:<5s}{:>8s}{:>20s}{:>20s}{:>27s}'.format('RANK', 'SIM', 'CLIENT', 'PROJECT', 'FILE')
         line = 120
 
         self.textOutput.setText('{:-{align}{width}}'.format(sections[0], align='^', width=line))
-        self.textOutput.append('{:<5s}{:>8s}{:>12}{:>12s}'.format('RANK', 'SIM', 'CLIENT', 'FILE'))
+        self.textOutput.append(headers)
         self.textOutput.append('{:-{align}{width}}'.format('', align='^', width=line))
         #
         for i in range(min(len(sims), 10)):
             labels = w.labels[str(sims[i][0])]
-            self.textOutput.append('{:<10d}{: 8.3f}\t{:>12.7}\t{:<12s}'.format(i + 1, sims[i][1], labels[0], labels[1]))
+            self.textOutput.append('{:<10d}{: 8.3f}\t{:>14.12}{:>14.12}\t{:<12s}'.format(i + 1, sims[i][1], labels[0], labels[1], labels[-1]))
 
         self.textOutput.append('\n')
         self.textOutput.append('{:-{align}{width}}'.format(sections[1], align='^', width=line))
@@ -113,38 +114,46 @@ class MyWindow(QMainWindow):
 
         self.textOutput.append('\n')
         self.textOutput.append('{:-{align}{width}}'.format(sections[2], align='^', width=line))
-        self.textOutput.append('{:<5s}{:>8s}{:>12}{:>12s}'.format('RANK', 'SIM', 'CLIENT', 'FILE'))
+        self.textOutput.append(headers)
         self.textOutput.append('{:-{align}{width}}'.format('', align='^', width=line))
 
         for i in range(min(len(sims_tfidf), 10)):
             labels = w.labels[str(sims_tfidf[i][0])]
             self.textOutput.append(
-                '{:<10d}{: 8.3f}\t{:>12.7}\t{:<12s}'.format(i + 1, sims_tfidf[i][1], labels[0], labels[1]))
+                '{:<10d}{: 8.3f}\t{:>14.12}{:>14.12}\t{:<12s}'.format(i + 1, sims_tfidf[i][1], labels[0], labels[1], labels[-1]))
+
 
     def reset_model(self):
-        """Delete attribute when changing the project folder."""
+        """Delete attribute when changing the model folder."""
 
-        logging.info('Reset model')
         if hasattr(w, 'model'):
             del w.model
+            logging.info('Model reset')
+
 
     def train_model(self):
         if os.path.isdir(w.input_line_edit_doc.text()):
             corpus = MyCorpus(w.input_line_edit_doc.text())
-            _ = corpus.save_to_temp()
-            _ = corpus.get_labels()
+            corpus.save_to_temp()
+            #_ = corpus.get_labels()
 
             tfidf, corpus_tfidf, lsi, corpus_lsi = corpus.build_lsi(topics=250)
-            index_lsi = build_index(list(corpus_lsi))
-            index_tfidf = build_index(list(corpus_tfidf), len(corpus.dictionary))
+            # build LSI index
+            _ = build_index(list(corpus_lsi))
+            # build tfidf index
+            _ = build_index(list(corpus_tfidf), num_features=len(corpus.dictionary))
             w.textOutput_train.setText('Training complete!')
 
         else:
             w.textOutput_train.setText('Please select a valid folder')
 
-    def save_model(self):
+    def add_documents(self):
+        pass
+
+    @staticmethod
+    def save_model():
         src = TEMP_FOLDER
-        dst = w.input_line_edit_project.text()  # TODO: Check if the path is a valid folder
+        dst = w.input_line_edit_model.text()  # TODO: Check if the path is a valid folder
         # list of files expected in your TEMP folder after training a model
         files = ['sparse.index',
                  'tmp.index',
@@ -162,13 +171,14 @@ class MyWindow(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     w = MyWindow()
-    w.open_project_button.clicked.connect(MyWindow.open_project)
+    w.open_model_button.clicked.connect(MyWindow.open_model)
     w.open_doc_button.clicked.connect(MyWindow.open_doc)
     w.run_query_button.clicked.connect(MyWindow.run_query)
-    w.actionOpen_Project.triggered.connect(MyWindow.open_project)
+    w.actionOpen_Model.triggered.connect(MyWindow.open_model)
     w.actionExit.triggered.connect(qApp.quit)
-    w.input_line_edit_project.textChanged.connect(MyWindow.reset_model)
+    w.input_line_edit_model.textChanged.connect(MyWindow.reset_model)
     w.train_model_button.clicked.connect(MyWindow.train_model)
-    w.save_project_button.clicked.connect(MyWindow.save_model)
+    w.save_model_button.clicked.connect(MyWindow.save_model)
+    w.add_documents_button.clicked.connect(MyWindow.add_documents)
 
     sys.exit(app.exec_())

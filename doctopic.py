@@ -2,12 +2,14 @@ from gensim import corpora, models, similarities, utils
 import os
 import tempfile
 import json
-from smart_open import open
+#from smart_open import open
 import logging
+import zipfile
+import unicodedata
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-TEMP_FOLDER = tempfile.gettempdir()
+TEMP_FOLDER = tempfile.gettempdir()  #  TODO: Replace with tempfile.NamedTemporaryFile class definitions
 logging.info('Folder "{}" will be used to save temporary dictionary and corpus.'.format(TEMP_FOLDER))
 
 
@@ -19,7 +21,7 @@ class MyCorpus(object):
     def __init__(self, top_dir):
         self.top_dir = top_dir
         self.dictionary = corpora.Dictionary(iter_documents(top_dir))
-        self.dictionary.filter_extremes(no_below=1, keep_n=30000)  # check API docs for pruning params
+        self.dictionary.filter_extremes(no_below=1, keep_n=100000)  # check API docs for pruning params
 
     def __iter__(self):
         for tokens in iter_documents(self.top_dir):
@@ -73,9 +75,18 @@ class MyCorpus(object):
         idx = 0
         labels = {}
         for root, dirs, files in os.walk(self.top_dir):
+            client = os.path.split(os.path.split(root)[0])[1]
+            project = os.path.split(root)[1]
             for file in filter(lambda file: file.endswith('.txt'), files):
-                labels[str(idx)] = [os.path.split(root)[1], file]
+                labels[str(idx)] = [client, project, file]
                 idx += 1
+
+            for file in filter(lambda file: file.endswith('.zip'), files):
+                with zipfile.ZipFile(os.path.join(root, file), 'r') as doczip:
+                    for name in doczip.namelist():
+                        labels[str(idx)] = [client, project, name]
+                        idx += 1
+
         # save labels to file
         save_labels(labels, os.path.join(TEMP_FOLDER, 'tmp.json'))
 
@@ -131,14 +142,46 @@ def file_to_query(filepath, dictionary):
 
 def iter_documents(top_directory):
     """Iterate over all documents, yielding a document (=list of utf8 tokens) at a time."""
+    idx = 0
+    labels = {}
 
     for root, dirs, files in os.walk(top_directory):
-        for file in filter(lambda file: file.endswith('.txt'), files):  # TODO: Add filter for PDF files
-            with open(os.path.join(root, file), 'rb') as document:
-                document = document.read()  # read the entire document, as one big string
-                logging.info(file)
-                yield tokenize(document)  # or whatever tokenization suits you
+        client = os.path.split(os.path.split(root)[0])[1]
+        project = os.path.split(root)[-1]
+        logging.debug(client)
+        logging.debug(project)
 
+        for file in filter(lambda file: file.endswith('.txt'), files):  # TODO: Add filter for PDF files
+
+            try:
+                with open(os.path.join(root, file), 'rb') as document:
+                    logging.debug(file)
+
+                    document = document.read()  # read the entire document, as one big string
+                    labels[str(idx)] = [client, project, file]
+                    idx += 1
+                    yield tokenize(document)  # or whatever tokenization suits you
+            except UnicodeDecodeError:
+                idx -= 1
+                continue
+
+        for file in filter(lambda file: file.endswith('.zip'), files):
+            with zipfile.ZipFile(os.path.join(root, file), 'r') as doczip:
+                for name in doczip.namelist():
+                    logging.debug(name)
+                    if name.endswith('.txt'):
+                        try:
+                            with doczip.open(name) as document:
+                                document = document.read()  # read the entire document, as one big string
+                                labels[str(idx)] = [client, project, name]
+                                logging.debug([idx, client, project, name])
+                                idx += 1
+                                yield tokenize(document)
+                        except UnicodeDecodeError:
+                            idx -= 1
+                            continue
+
+    save_labels(labels, os.path.join(TEMP_FOLDER, 'tmp.json'))
 
 def load_from_folder(folder):
     model, dictionary, tfidf, sparse_index, index, labels = None, None, None, None, None, None
@@ -168,7 +211,7 @@ def load_labels(fp):
 
 
 def save_labels(labels, fp):
-    """Store document ids with filename and directory for reference purposes."""
+    """Store document ids with grandparent & parent directory name and filename for reference purposes."""
 
     with open(fp, 'w') as f:
         json.dump(labels, f, sort_keys=True)

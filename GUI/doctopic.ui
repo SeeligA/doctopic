@@ -49,7 +49,7 @@
    </property>
    <layout class="QGridLayout" name="gridLayout_2">
     <item row="0" column="2">
-     <widget class="QPushButton" name="open_project_button">
+     <widget class="QPushButton" name="open_model_button">
       <property name="enabled">
        <bool>true</bool>
       </property>
@@ -66,7 +66,7 @@
        </size>
       </property>
       <property name="text">
-       <string>Open Project</string>
+       <string>Open Model</string>
       </property>
       <property name="autoDefault">
        <bool>true</bool>
@@ -80,7 +80,7 @@
      </widget>
     </item>
     <item row="0" column="0">
-     <widget class="QLabel" name="project_label">
+     <widget class="QLabel" name="model_label">
       <property name="maximumSize">
        <size>
         <width>70</width>
@@ -88,12 +88,12 @@
        </size>
       </property>
       <property name="text">
-       <string>Project: </string>
+       <string>Model: </string>
       </property>
      </widget>
     </item>
     <item row="0" column="1">
-     <widget class="QLineEdit" name="input_line_edit_project">
+     <widget class="QLineEdit" name="input_line_edit_model">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
         <horstretch>10</horstretch>
@@ -236,30 +236,72 @@
           </property>
          </widget>
         </item>
-        <item row="2" column="3">
-         <widget class="QPushButton" name="train_model_button">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="toolTip">
-           <string>Calculate post-edit distance score</string>
-          </property>
-          <property name="text">
-           <string>Train Model</string>
-          </property>
-         </widget>
-        </item>
         <item row="3" column="3">
-         <widget class="QPushButton" name="save_project_button">
+         <widget class="QPushButton" name="save_model_button">
           <property name="text">
            <string>Save Project</string>
           </property>
+         </widget>
+        </item>
+        <item row="2" column="3">
+         <widget class="QGroupBox" name="groupBox">
+          <property name="title">
+           <string>Select:</string>
+          </property>
+          <widget class="QPushButton" name="train_model_button">
+           <property name="enabled">
+            <bool>true</bool>
+           </property>
+           <property name="geometry">
+            <rect>
+             <x>0</x>
+             <y>100</y>
+             <width>202</width>
+             <height>23</height>
+            </rect>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string>Calculate post-edit distance score</string>
+           </property>
+           <property name="text">
+            <string>Train Model</string>
+           </property>
+          </widget>
+          <widget class="QPushButton" name="add_documents_button">
+           <property name="geometry">
+            <rect>
+             <x>0</x>
+             <y>20</y>
+             <width>202</width>
+             <height>23</height>
+            </rect>
+           </property>
+           <property name="text">
+            <string>Add Document</string>
+           </property>
+          </widget>
+          <widget class="QLabel" name="label">
+           <property name="geometry">
+            <rect>
+             <x>70</x>
+             <y>60</y>
+             <width>47</width>
+             <height>13</height>
+            </rect>
+           </property>
+           <property name="text">
+            <string>OR</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
          </widget>
         </item>
        </layout>
@@ -281,7 +323,7 @@
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionOpen_Project"/>
+    <addaction name="actionOpen_Model"/>
     <addaction name="separator"/>
     <addaction name="actionSave_as"/>
     <addaction name="separator"/>
@@ -297,7 +339,7 @@
    <addaction name="menuFile"/>
    <addaction name="menuHelp"/>
   </widget>
-  <action name="actionOpen_Project">
+  <action name="actionOpen_Model">
    <property name="text">
     <string>Open Project...</string>
    </property>
