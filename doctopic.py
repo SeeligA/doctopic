@@ -1,14 +1,15 @@
 from gensim import corpora, models, similarities, utils
+from gensim.test.utils import get_tmpfile
 import os
 import tempfile
 import json
-#from smart_open import open
+# from smart_open import open
 import logging
 import zipfile
-import unicodedata
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
+index_tmpfile = get_tmpfile("index")
 TEMP_FOLDER = tempfile.gettempdir()  #  TODO: Replace with tempfile.NamedTemporaryFile class definitions
 logging.info('Folder "{}" will be used to save temporary dictionary and corpus.'.format(TEMP_FOLDER))
 
@@ -51,7 +52,7 @@ class MyCorpus(object):
             corpus_lsi: transformation of lsi model and self
         """
 
-        # When building indeces from transformed vectors, apply same transformation to search vectors
+        # When building indices from transformed vectors, apply same transformation to search vectors
         tfidf, corpus_tfidf = self.build_tfidf()
         lsi = models.LsiModel(corpus_tfidf, id2word=self.dictionary, num_topics=topics)
         corpus_lsi = lsi[corpus_tfidf]
@@ -92,40 +93,30 @@ class MyCorpus(object):
 
         return labels
 
-    def train_lsi(self, filepath):
-        """Train new LSI model and save to TEMP."""
 
-        _, tfidf_train = self.build_tfidf()
-        logging.info('new tfidf corpus built')
-        lsi = models.LsiModel.load(filepath)
-        logging.info('existing LSI model loaded')
-        lsi.add_documents(
-            tfidf_train)  # TODO: check for limitations as to how many documents can be added at a time
-        logging.info('additional docs added')
-        trained_lsi = lsi[tfidf_train]
-        logging.info('training corpus fitted to model')
-        lsi.save(os.path.join(TEMP_FOLDER, 'train.lsi'))
-        return lsi, trained_lsi
-
-
-def build_index(corpus, num_features=False):
+def build_index(corpus, num_features, fp):
     """Build indices for different models.
 
     Args:
         corpus: either a regular MyCorpus object or a transformation
         num_features: number of dimensions required for creating sparse vectors
+        fp: path/to/file
 
     Returns:
         index: index of documents comprised in a corpus
     """
-    # TODO: Change similarity class to Similarity()
-    if num_features:
-        index = similarities.SparseMatrixSimilarity(corpus, num_features=num_features)
-        index.save(os.path.join(TEMP_FOLDER, 'sparse.index'))
 
-    else:
-        index = similarities.MatrixSimilarity(corpus)  # TODO: include option to specify num_best
-        index.save(os.path.join(TEMP_FOLDER, 'tmp.index'))
+    #if sparse:
+    #    index = similarities.SparseMatrixSimilarity(corpus, num_features=num_features)
+    #    index.save(os.path.join(TEMP_FOLDER, 'sparse.index'))
+
+
+    #index_tmpfile = os.path.join('data\\models\\PNTXmini', 'index')
+    index = similarities.Similarity(fp,  # TODO: include option to specify num_best
+                                    corpus,
+                                    num_features)
+
+    #index.save(os.path.join(TEMP_FOLDER, 'tmp.index'))
 
     return index
 
@@ -133,7 +124,7 @@ def build_index(corpus, num_features=False):
 def file_to_query(filepath, dictionary):
     """Generate BOW vector from document for querying purposes."""
 
-    if (os.path.exists(filepath)):
+    if os.path.exists(filepath):
         document = open(filepath, 'rb').read()
         tokens = tokenize(document)
         vec_bow = dictionary.doc2bow(tokens)
@@ -183,31 +174,56 @@ def iter_documents(top_directory):
 
     save_labels(labels, os.path.join(TEMP_FOLDER, 'tmp.json'))
 
+
 def load_from_folder(folder):
-    model, dictionary, tfidf, sparse_index, index, labels = None, None, None, None, None, None
+    lsi, dictionary, tfidf, tfidf_index, lsi_index, labels, corpus = None, None, None, None, None, None, None
     for file in os.listdir(folder):
         logging.info('Scanning: {}'.format(file))
 
         if file.endswith('.lsi'):
-            model = models.LsiModel.load(os.path.join(folder, file))
+            lsi = models.LsiModel.load(os.path.join(folder, file))
         elif file.endswith('.tfidf'):
             tfidf = models.TfidfModel.load(os.path.join(folder, file))
         elif file.endswith('.dict'):
             dictionary = corpora.Dictionary.load(os.path.join(folder, file))
-        elif file.endswith('sparse.index'):
-            sparse_index = similarities.SparseMatrixSimilarity.load(os.path.join(folder, file))
-        elif file.endswith('tmp.index'):
-            index = similarities.MatrixSimilarity.load(os.path.join(folder, file))
+        elif file.endswith('tfidf.index'):
+            tfidf_index = similarities.Similarity.load(os.path.join(folder, file))
+        elif file.endswith('lsi.index'):
+            lsi_index = similarities.Similarity.load(os.path.join(folder, file))
         elif file.endswith('.json'):
             labels = load_labels(os.path.join(folder, file))
+        elif file.endswith('.mm'):
+            corpus = corpora.MmCorpus(os.path.join(folder, file))
 
-    return model, dictionary, tfidf, sparse_index, index, labels
+    return lsi, dictionary, tfidf, tfidf_index, lsi_index, labels, corpus
 
 
 def load_labels(fp):
     with open(fp) as f:
         labels = json.load(f)
     return labels
+
+
+def merge_labels(fp):
+    """Merge model labels with training doc labels
+
+    Args:
+        fp: path to model parameters
+    Returns:
+        None
+    """
+    fp = os.path.join(fp, 'tmp.json')
+
+    labels = load_labels(fp)
+    # Models labels need to be indexed consecutively
+    idx = len(labels)
+
+    new_labels = load_labels(os.path.join(TEMP_FOLDER, 'tmp.json'))
+    for k, v in new_labels.items():
+        labels[str(idx)] = v
+        idx += 1
+    save_labels(labels, fp)
+    return len(new_labels)
 
 
 def save_labels(labels, fp):
