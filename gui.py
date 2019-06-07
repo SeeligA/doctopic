@@ -1,20 +1,15 @@
 import sys
 
 from qtpy import QtCore, uic
-from qtpy.QtWidgets import qApp, QApplication, QFileDialog, QMainWindow
+from qtpy.QtWidgets import qApp, QApplication, QFileDialog, QMainWindow, QMessageBox
 
 import os.path
-from doctopic import MyCorpus, load_from_folder, file_to_query, build_index, merge_labels, iter_documents
+
+from doctopic import MyCorpus, load_from_folder, file_to_query, build_index, merge_labels, iter_documents, TEMP_FOLDER
 from gensim import corpora, models, similarities
 import logging
-import tempfile
-from shutil import copy2
-import itertools
 
-from gensim.test.utils import get_tmpfile
-
-index_tmpfile = get_tmpfile("index")
-TEMP_FOLDER = tempfile.gettempdir()
+import shutil
 
 
 class MyWindow(QMainWindow):
@@ -33,6 +28,10 @@ class MyWindow(QMainWindow):
         self.input_line_edit_model.textChanged.connect(self.new_folder_changed)
         self.input_line_edit_query.textChanged.connect(self.new_doc_changed)
 
+    def new_folder_changed(self, newFolder):
+        """Store dirpath to settings"""
+        self.settings.setValue("savedFolder", w.input_line_edit_model.text())
+
     def initUI(self):
 
         uic.loadUi(os.path.join('GUI', 'doctopic.ui'), self)
@@ -41,10 +40,6 @@ class MyWindow(QMainWindow):
         self.statusBar().showMessage('Ready')
 
         self.show()
-
-    def new_folder_changed(self, newFolder):
-        """Store dirpath to settings"""
-        self.settings.setValue("savedFolder", w.input_line_edit_model.text())
 
     def new_doc_changed(self, newDoc):
         """Store filepath to settings"""
@@ -144,25 +139,25 @@ class MyWindow(QMainWindow):
             logging.info('Model reset')
 
     def train_model(self):
-        dst = w.input_line_edit_train.text()
-        src = w.input_line_edit_model.text()
-        fp = [os.path.join(src, name) for name in ['lsi.index', 'tfidf.index']]
+        src = w.input_line_edit_train.text()
+        dst = [os.path.join(TEMP_FOLDER, name) for name in ['lsi.index', 'tfidf.index']]
 
-        if os.path.isdir(dst):
-            corpus = MyCorpus(dst)
+        if os.path.isdir(src):
+            corpus = MyCorpus(src)
             corpus.save_to_temp()
             num_features = len(corpus.dictionary)
 
             tfidf, corpus_tfidf, lsi, corpus_lsi = corpus.build_lsi(topics=250)
 
-            # build LSI index
-            lsi_index = build_index(corpus_lsi, num_features, fp[0])
-            lsi_index.save(fp[0])
-            # build tfidf index
-            tfidf_index = build_index(corpus_tfidf, num_features, fp[1])
-            tfidf_index.save(fp[1])
+            # build LSI index and save to temp folder
+            lsi_index = build_index(corpus_lsi, num_features, dst[0])
+            lsi_index.save(dst[0])
+            # build tfidf index and save to temp folder
+            tfidf_index = build_index(corpus_tfidf, num_features, dst[1])
+            tfidf_index.save(dst[1])
 
             w.textOutput_train.setText('Training complete! Click "Save Project" to save parameters to model folder')
+            w.save_model_button.setEnabled(True)
 
         else:
             w.textOutput_train.setText('Please select a valid training folder')
@@ -171,82 +166,107 @@ class MyWindow(QMainWindow):
 
     def add_docs(self):
 
-
         dst = w.input_line_edit_model.text()
         src = w.input_line_edit_train.text()
-
         if os.path.isdir(dst) and os.path.isdir(src):
 
-            # Load dictionary and create corpus
-            dictionary = corpora.Dictionary.load(os.path.join(dst, 'tmp.dict'))
+            dialog = QMessageBox.question(w, 'DocTopic', 'This operation will change your search indices. Continue?',
+                                          QMessageBox.Save | QMessageBox.Cancel, QMessageBox.Cancel)
+            if dialog == QMessageBox.Save:
 
-            train_corpus = []
-            for tokens in iter_documents(src):
-                train_corpus.append(dictionary.doc2bow(tokens))
-            corpora.MmCorpus.serialize(os.path.join(TEMP_FOLDER, 'tmp.mm'), train_corpus)
-            train_corpus = corpora.MmCorpus(os.path.join(TEMP_FOLDER, 'tmp.mm'))
+                # Load dictionary and create corpus
+                dictionary = corpora.Dictionary.load(os.path.join(dst, 'tmp.dict'))
+
+                train_corpus = []
+                for tokens in iter_documents(src):
+                    train_corpus.append(dictionary.doc2bow(tokens))
+                corpora.MmCorpus.serialize(os.path.join(TEMP_FOLDER, 'tmp.mm'), train_corpus)
+                train_corpus = corpora.MmCorpus(os.path.join(TEMP_FOLDER, 'tmp.mm'))
 
 
-            # Fold training dictionary into model dictionary
-            #train_to_dict = dictionary.merge_with(train_dict)
+                # Fold training dictionary into model dictionary
+                #train_to_dict = dictionary.merge_with(train_dict)
 
-            # Merge corpora
-            #dictionary.save(os.path.join(dst, 'tmp.dict'))
-            #dictionary.save(os.path.join(dst, 'tmp.dict'))
+                # Merge corpora
+                #dictionary.save(os.path.join(dst, 'tmp.dict'))
+                #dictionary.save(os.path.join(dst, 'tmp.dict'))
 
-            #trained_corpus = itertools.chain(corpus, train_to_dict[train_corpus])
+                #trained_corpus = itertools.chain(corpus, train_to_dict[train_corpus])
 
-            # Overwrite model corpus
-            #corpora.MmCorpus.serialize(os.path.join(dst, 'tmp.mm'), trained_corpus)
+                # Overwrite model corpus
+                #corpora.MmCorpus.serialize(os.path.join(dst, 'tmp.mm'), trained_corpus)
 
-            # Load pre-trained LSI models
-            tfidf = models.TfidfModel.load(os.path.join(dst, 'tmp.tfidf'))
-            lsi = models.LsiModel.load(os.path.join(dst, 'tmp.lsi'))
+                # Load pre-trained LSI models
+                tfidf = models.TfidfModel.load(os.path.join(dst, 'tmp.tfidf'))
+                lsi = models.LsiModel.load(os.path.join(dst, 'tmp.lsi'))
 
-            # Load indices
-            lsi_index = similarities.Similarity.load(os.path.join(dst, 'lsi.index'))
-            tfidf_index = similarities.Similarity.load(os.path.join(dst, 'tfidf.index'))
+                # Load indices
+                lsi_index = similarities.Similarity.load(os.path.join(dst, 'lsi.index'))
+                tfidf_index = similarities.Similarity.load(os.path.join(dst, 'tfidf.index'))
 
-            # Update indices with training corpus
-            lsi_index.add_documents(lsi[tfidf[list(train_corpus)]])
-            tfidf_index.add_documents(tfidf[list(train_corpus)])
+                # Update indices with training corpus
+                lsi_index.add_documents(lsi[tfidf[list(train_corpus)]])
+                tfidf_index.add_documents(tfidf[list(train_corpus)])
 
-            # Save updated indices
-            lsi_index.save(os.path.join(dst, 'lsi.index'))
-            tfidf_index.save(os.path.join(dst, 'tfidf.index'))
+                # Save updated indices
+                lsi_index.save(os.path.join(dst, 'lsi.index'))
+                tfidf_index.save(os.path.join(dst, 'tfidf.index'))
 
-            # Update labels and save to file
-            cnt = merge_labels(dst)
-            w.textOutput_train.setText('{} documents added!'.format(cnt))
+                # Update labels and save to file
+                cnt = merge_labels(dst)
+                w.textOutput_train.setText('{} documents added!'.format(cnt))
+            else:
+                pass
 
         else:
             w.textOutput_train.setText('Please select a valid folder')
 
-
     @staticmethod
-    def save_model():
+    def save_model(self):
+
+        dst = w.input_line_edit_model.text()
+
+        files = os.listdir(dst)
+        if len(files) > 0:
+            basename = os.path.join(dst)
+            root = os.path.dirname(dst)
+            basedir = os.path.basename(dst)
+
+            # Create ZIP archive in root directory
+            shutil.make_archive(basename, 'zip', root, basedir)
+            w.textOutput_train.append('Backup of {} folder created here: {}'.format(basedir, root))
+
+            # Remove files in basedir
+            for file in files:
+                os.unlink(os.path.join(dst, file))
+
+        else:
+            pass
+
         src = TEMP_FOLDER
-        dst = w.input_line_edit_model.text()  # TODO: Check if the path is a valid folder
-        # list of files expected in your TEMP folder after training a model
-        files = ['index.0',
-                 #'sparse.index',
-                 #'tmp.index',
-                 'tmp.lsi',
-                 'tmp.tfidf',
-                 'tmp.lsi.projection',
-                 'tmp.lsi.projection.u.npy',
-                 'tmp.dict',
-                 'tmp.json',
-                 'tmp.mm']
+        files = os.listdir(src)
+
         cnt = 0
         for file in files:
             fp = os.path.join(src, file)
-            if os.path.exists(fp):
-                copy2(fp, os.path.join(dst, file))
+            fp_new = os.path.join(dst, file)
+
+            if file.endswith('lsi.index') or file.endswith('tfidf.index'):
+                index = similarities.Similarity.load(fp)
+                index.output_prefix = fp_new
+                index.check_moved()
+                index.save(fp_new)
+                cnt += 1
+
+            else:
+                shutil.copy2(fp, fp_new)
                 cnt += 1
                 logging.info('Copying {} to {}'.format(file, dst))
+            # Remove file in temporary folder
+            os.unlink(fp)
 
         w.textOutput_train.append('{} files saved'.format(cnt))
+        w.save_model_button.setDisabled(True)
 
 
 if __name__ == '__main__':

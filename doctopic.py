@@ -6,11 +6,13 @@ import json
 # from smart_open import open
 import logging
 import zipfile
+from contextlib import contextmanager
+
+
+TEMP_FOLDER = tempfile.mkdtemp()
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-index_tmpfile = get_tmpfile("index")
-TEMP_FOLDER = tempfile.gettempdir()  #  TODO: Replace with tempfile.NamedTemporaryFile class definitions
 logging.info('Folder "{}" will be used to save temporary dictionary and corpus.'.format(TEMP_FOLDER))
 
 
@@ -106,19 +108,7 @@ def build_index(corpus, num_features, fp):
         index: index of documents comprised in a corpus
     """
 
-    #if sparse:
-    #    index = similarities.SparseMatrixSimilarity(corpus, num_features=num_features)
-    #    index.save(os.path.join(TEMP_FOLDER, 'sparse.index'))
-
-
-    #index_tmpfile = os.path.join('data\\models\\PNTXmini', 'index')
-    index = similarities.Similarity(fp,  # TODO: include option to specify num_best
-                                    corpus,
-                                    num_features)
-
-    #index.save(os.path.join(TEMP_FOLDER, 'tmp.index'))
-
-    return index
+    return similarities.Similarity(fp, corpus, num_features)
 
 
 def file_to_query(filepath, dictionary):
@@ -179,7 +169,6 @@ def load_from_folder(folder):
     lsi, dictionary, tfidf, tfidf_index, lsi_index, labels, corpus = None, None, None, None, None, None, None
     for file in os.listdir(folder):
         logging.info('Scanning: {}'.format(file))
-
         if file.endswith('.lsi'):
             lsi = models.LsiModel.load(os.path.join(folder, file))
         elif file.endswith('.tfidf'):
