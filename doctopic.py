@@ -96,7 +96,7 @@ class MyCorpus(object):
         return labels
 
 
-def build_index(corpus, num_features, fp):
+def build_index(fp, corpus, num_features):
     """Build indices for different models.
 
     Args:
@@ -107,8 +107,9 @@ def build_index(corpus, num_features, fp):
     Returns:
         index: index of documents comprised in a corpus
     """
+    index = similarities.Similarity(fp, corpus, num_features)
 
-    return similarities.Similarity(fp, corpus, num_features)
+    return index
 
 
 def file_to_query(filepath, dictionary):

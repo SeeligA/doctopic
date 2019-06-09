@@ -6,16 +6,16 @@ A topic modelling and similarity retrieval interface that helps you managing you
 * An interactive introduction to similarity search can be found [here](https://www.oreilly.com/learning/how-do-i-compare-document-similarity-using-python "Document Similarity using Python").
 
 ## Features
-* Create a corpus from your files with 2 clicks.
+* Create a searchable corpus from your multilingual documents with 2 clicks.
 * Use unsupervised training algorithms such as _Latent Semantic Analysis_ and _Latent Dirichlet Allocation_ for topic modelling purposes.  
 * Query your corpus to retrieve documents that are structurally similar or belong to a similar domain.
 * Update your search indices with new files so that they can be retrieved later.
 
-## Use cases for translation providers
-Identify relevant resources from __historical project data__:
+## Use cases for translation service providers
+Identify relevant resources from __historical project data__ such as:
 * previous translations to be used as templates
 * translation vendors who are experts in their field
-* project parameters such as turn-around times, pre-processing, etc.
+* project parameters such as turn-around times, pre-processing steps, etc.
 
 Quickly assess the similarity of __files within a project__ to help with:
 * staggered/cascading deliveries
