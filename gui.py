@@ -1,15 +1,17 @@
 import sys
+import logging
+import os.path
+import shutil
 
 from qtpy import QtCore, uic
-from qtpy.QtWidgets import qApp, QApplication, QFileDialog, QMainWindow, QMessageBox
+from qtpy.QtCore import Qt
+from qtpy.QtWidgets import qApp, QApplication, QFileDialog, QMainWindow, QMessageBox, QTreeWidgetItem, QHeaderView, QTreeWidgetItemIterator
 
-import os.path
-
-from doctopic import MyCorpus, load_from_folder, file_to_query, build_index, merge_labels, iter_documents, TEMP_FOLDER
 from gensim import corpora, models, similarities
-import logging
+from collections import Counter
 
-import shutil
+from doctopic import MyCorpus, load_from_folder, file_to_query, build_index, merge_labels, iter_documents, TEMP_FOLDER, load_labels
+
 
 
 class MyWindow(QMainWindow):
@@ -23,10 +25,10 @@ class MyWindow(QMainWindow):
         save_folder = self.settings.value("savedFolder", "")
         self.input_line_edit_model.setText(save_folder)
         save_doc = self.settings.value("savedDoc", "")
-        self.input_line_edit_query.setText(save_doc)
+        #self.input_line_edit_query.setText(save_doc)
         # Write new user input to settings
         self.input_line_edit_model.textChanged.connect(self.new_folder_changed)
-        self.input_line_edit_query.textChanged.connect(self.new_doc_changed)
+        #self.input_line_edit_query.textChanged.connect(self.new_doc_changed)
 
     def new_folder_changed(self, newFolder):
         """Store dirpath to settings"""
@@ -41,26 +43,31 @@ class MyWindow(QMainWindow):
 
         self.show()
 
-    def new_doc_changed(self, newDoc):
+    def new_doc_changed(self):
         """Store filepath to settings"""
-        self.settings.setValue("savedDoc", w.input_line_edit_query.text())
+        #self.settings.setValue("savedDoc", w.input_line_edit_query.text())
 
-    def open_model(self):
+    @staticmethod
+    def open_model():
         """Open file dialog and write dirpath to line edit."""
         dirpath = QFileDialog.getExistingDirectory()
         w.input_line_edit_model.setText(dirpath)
 
-    def open_folder(self):
+    @staticmethod
+    def open_folder():
         """Open file dialog and write dirpath to line edit."""
         dirpath = QFileDialog.getExistingDirectory()
         w.input_line_edit_train.setText(dirpath)
 
-    def open_doc(self):
-        """Open file dialog and write filepath to line edit."""
-        fp = QFileDialog.getOpenFileName(filter='TXT-Datei (*.txt)')[0]
-        w.input_line_edit_query.setText(fp)
+    @staticmethod
+    def open_doc():
+        """Open file dialog and write filepath(s) to list widget."""
+        w.query_list_widget.clear()
+        fp = QFileDialog.getOpenFileNames(filter='TXT-Datei (*.txt)')[0]
+        w.query_list_widget.addItems(fp)
 
-    def load_model(self):
+    @staticmethod
+    def load_model():
         # Check if a model has been already loaded
         if hasattr(w, 'lsi'):
             pass
@@ -70,36 +77,92 @@ class MyWindow(QMainWindow):
             w.lsi, w.dictionary, w.tfidf, w.tfidf_index, w.lsi_index, w.labels, w.corpus = load_from_folder(
                 w.input_line_edit_model.text())
             # Abort query if one or more files are missing
-            if all((w.lsi, w.dictionary, w.tfidf, w.tfidf_index, w.lsi_index, w.labels, w.corpus)) == False:
+            if not all((w.lsi, w.dictionary, w.tfidf, w.tfidf_index, w.lsi_index, w.labels, w.corpus)):
                 w.textOutput.setText('UnboundLocalError: Unable to find local variable')
                 return None
 
-    def run_query(self):
+    @staticmethod
+    def run_query():
         """Run query against model."""
 
-        # Check if a query document has been specified
-        if os.path.isfile(w.input_line_edit_query.text()):
-            w.load_model()
-            # Convert file to BOW vector
-            vec_bow = file_to_query(w.input_line_edit_query.text(), w.dictionary)
-            vec_bow = w.tfidf[vec_bow]
-            # Serialize tfidf transformation and convert search vector to LSI space
-            # Note: When using transformed search vectors, apply same transformation when building the index
-            vec_lsi = w.lsi[vec_bow]
+        w.textOutput.clear()
 
-            # Apply search vector to indexed LSI corpus and sort resulting index-similarity tuples.
-            sims_lsi = w.lsi_index[vec_lsi]
-            sims_lsi = sorted(enumerate(sims_lsi), key=lambda item: -item[1])
-            # Retrieve most prominent topic from search vector
-            topic = w.lsi.print_topic(max(vec_lsi, key=lambda item: abs(item[1]))[0])
+        w.load_model()
+        #  Todo: Implement batch querying for improved performance
+        for path in [str(w.query_list_widget.item(i).text()) for i in range(w.query_list_widget.count())]:
+            basename = os.path.basename(path)
+            w.textOutput.append('Printing results for {}'.format(basename))
 
-            # Apply search vector to transformed tfidf corpus and sort resulting index-similarity tuples
-            sims_tfidf = w.tfidf_index[vec_bow]
-            sims_tfidf = sorted(enumerate(sims_tfidf), key=lambda item: -item[1])
+            if os.path.isfile(path):
+                vec_bow = file_to_query(path, w.dictionary)
+                vec_bow = w.tfidf[vec_bow]
+                # Serialize tfidf transformation and convert search vector to LSI space
+                # Note: When using transformed search vectors, apply same transformation when building the index
+                vec_lsi = w.lsi[vec_bow]
 
-            w.print_details(sims_lsi, sims_tfidf, topic)
-        else:
-            w.textOutput.setText('Please select a valid file')
+                # Apply search vector to indexed LSI corpus and sort resulting index-similarity tuples.
+                sims_lsi = w.lsi_index[vec_lsi]
+                sims_lsi = sorted(enumerate(sims_lsi), key=lambda item: -item[1])
+                # Retrieve most prominent topic from search vector
+                topic = w.lsi.print_topic(max(vec_lsi, key=lambda item: abs(item[1]))[0])
+
+                # Apply search vector to transformed tfidf corpus and sort resulting index-similarity tuples
+                sims_tfidf = w.tfidf_index[vec_bow]
+                sims_tfidf = sorted(enumerate(sims_tfidf), key=lambda item: -item[1])
+
+                w.print_details(sims_lsi, sims_tfidf, topic)
+
+            else:
+                w.textOutput.setText('{} not found. Please select a valid file.'.format(basename))
+
+
+    def load_tree(self):
+        """Build a index tree view from labels items."""
+
+        w.treeWidget.clear()
+        w.treeWidget.header().setSectionResizeMode(QHeaderView.ResizeToContents)
+        # Load model parameters including json dictionary with corpus metadata
+        w.load_model()
+        # Create lists from corpus metadata for populating tree cells
+        clients = [v[0] for v in w.labels.values()]
+        projects = [v[1] for v in w.labels.values()]
+        files_idx = [(v[2], k) for k, v in w.labels.items()]
+
+        # Create unique keys from list items for reference purposes
+        c_cnt = Counter(clients)
+        p_cnt = Counter(zip(clients, projects))
+        f_cnt = Counter(zip(clients, projects, files_idx))
+        c_dict, p_dict, f_dict = dict(), dict(), dict()
+
+        # Iterate over counter items to create client items
+        for key, count in c_cnt.items():
+            c_dict[key] = QTreeWidgetItem(w.treeWidget, [key, str(count)])
+            c_dict[key].setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
+            c_dict[key].setExpanded(1)
+        # Add project children to client items
+        for key, count in p_cnt.items():
+            p_dict[key] = QTreeWidgetItem(c_dict[key[0]], [key[1], str(count)])
+            p_dict[key].setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
+            p_dict[key].setCheckState(0, Qt.Unchecked)
+        # Add file children to project items
+        for key in f_cnt.keys():
+            f_dict[key] = QTreeWidgetItem(p_dict[key[:2]], [key[2][0], "", str(key[2][1])])
+            f_dict[key].setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
+            f_dict[key].setCheckState(0, Qt.Unchecked)
+
+    @staticmethod
+    def get_checked():
+        """Iterate over tree items and return keys of checked files."""
+
+        iterator = QTreeWidgetItemIterator(w.treeWidget)
+        idx = []
+        while iterator.value():
+            item = iterator.value()
+            if item.checkState(0) == Qt.Checked:
+                idx.append(item.text(2))
+            iterator += 1
+        print(idx)
+        # return idx
 
     def print_details(self, sims, sims_tfidf, topic):
         """Print query results to text output."""
@@ -109,13 +172,14 @@ class MyWindow(QMainWindow):
         line = 120
         dashed = '{:-{align}{width}}'.format('', align='^', width=line)
 
-        self.textOutput.setText('{:-{align}{width}}'.format(sections[0], align='^', width=line))
+        self.textOutput.append('{:-{align}{width}}'.format(sections[0], align='^', width=line))
         self.textOutput.append(headers)
         self.textOutput.append(dashed)
 
         for i in range(min(len(sims), 10)):
             labels = w.labels[str(sims[i][0])]
-            self.textOutput.append('{:<10d}{: 8.3f}\t{:>14.12}{:>14.12}\t{:<12s}'.format(i + 1, sims[i][1], labels[0], labels[1], labels[-1]))
+            self.textOutput.append('{:<10d}{: 8.3f}\t{:>14.12}{:>14.12}\t{:<12s}'
+                                   .format(i + 1, sims[i][1], labels[0], labels[1], labels[-1]))
 
         self.textOutput.append('\n')
         self.textOutput.append('{:-{align}{width}}'.format(sections[1], align='^', width=line))
@@ -129,16 +193,20 @@ class MyWindow(QMainWindow):
         for i in range(min(len(sims_tfidf), 10)):
             labels = w.labels[str(sims_tfidf[i][0])]
             self.textOutput.append(
-                '{:<10d}{: 8.3f}\t{:>14.12}{:>14.12}\t{:<12s}'.format(i + 1, sims_tfidf[i][1], labels[0], labels[1], labels[-1]))
+                '{:<10d}{: 8.3f}\t{:>14.12}{:>14.12}\t{:<12s}'
+                .format(i + 1, sims_tfidf[i][1], labels[0], labels[1], labels[-1]))
+        self.textOutput.append('\n')
 
-    def reset_model(self):
+    @staticmethod
+    def reset_model():
         """Delete attribute when changing the model folder."""
 
         if hasattr(w, 'lsi'):
             del w.lsi
             logging.info('Model reset')
 
-    def train_model(self):
+    @staticmethod
+    def train_model():
         src = w.input_line_edit_train.text()
         dst = [os.path.join(TEMP_FOLDER, name) for name in ['lsi.index', 'tfidf.index']]
 
@@ -150,10 +218,10 @@ class MyWindow(QMainWindow):
             tfidf, corpus_tfidf, lsi, corpus_lsi = corpus.build_lsi(topics=250)
 
             # build LSI index and save to temp folder
-            lsi_index = build_index(corpus_lsi, num_features, dst[0])
+            lsi_index = build_index(dst[0], corpus_lsi, num_features)
             lsi_index.save(dst[0])
             # build tfidf index and save to temp folder
-            tfidf_index = build_index(corpus_tfidf, num_features, dst[1])
+            tfidf_index = build_index(dst[1], corpus_tfidf, num_features)
             tfidf_index.save(dst[1])
 
             w.textOutput_train.setText('Training complete! Click "Save Project" to save parameters to model folder')
@@ -164,7 +232,8 @@ class MyWindow(QMainWindow):
 
         w.reset_model()
 
-    def add_docs(self):
+    @staticmethod
+    def add_docs():
 
         dst = w.input_line_edit_model.text()
         src = w.input_line_edit_train.text()
@@ -176,10 +245,9 @@ class MyWindow(QMainWindow):
 
                 # Load dictionary and create corpus
                 dictionary = corpora.Dictionary.load(os.path.join(dst, 'tmp.dict'))
+                # Create list of BOW from training documents
+                train_corpus = [dictionary.doc2bow(tokens) for tokens in iter_documents(src)]
 
-                train_corpus = []
-                for tokens in iter_documents(src):
-                    train_corpus.append(dictionary.doc2bow(tokens))
                 corpora.MmCorpus.serialize(os.path.join(TEMP_FOLDER, 'tmp.mm'), train_corpus)
                 train_corpus = corpora.MmCorpus(os.path.join(TEMP_FOLDER, 'tmp.mm'))
 
@@ -215,6 +283,7 @@ class MyWindow(QMainWindow):
                 # Update labels and save to file
                 cnt = merge_labels(dst)
                 w.textOutput_train.setText('{} documents added!'.format(cnt))
+                w.save_model_button.setDisabled(True)
             else:
                 pass
 
@@ -222,7 +291,7 @@ class MyWindow(QMainWindow):
             w.textOutput_train.setText('Please select a valid folder')
 
     @staticmethod
-    def save_model(self):
+    def save_model():
 
         dst = w.input_line_edit_model.text()
 
@@ -253,15 +322,20 @@ class MyWindow(QMainWindow):
 
             if file.endswith('lsi.index') or file.endswith('tfidf.index'):
                 index = similarities.Similarity.load(fp)
+                # Set internal path to index
                 index.output_prefix = fp_new
+                # Update path to index shards so that it corresponds to the output_prefix
                 index.check_moved()
+                # Save index with updated paths to file
                 index.save(fp_new)
-                cnt += 1
 
             else:
+                # Copy file to model parameters dir
                 shutil.copy2(fp, fp_new)
-                cnt += 1
-                logging.info('Copying {} to {}'.format(file, dst))
+
+            # Increment file count
+            cnt += 1
+            logging.info('Copying {} to {}'.format(file, dst))
             # Remove file in temporary folder
             os.unlink(fp)
 
@@ -282,5 +356,7 @@ if __name__ == '__main__':
     w.input_line_edit_model.textChanged.connect(MyWindow.reset_model)
     w.train_model_button.clicked.connect(MyWindow.train_model)
     w.save_model_button.clicked.connect(MyWindow.save_model)
+    w.load_tree_button.clicked.connect(MyWindow.load_tree)
+    w.dummy_button.clicked.connect(MyWindow.get_checked)
 
     sys.exit(app.exec_())
