@@ -9,6 +9,7 @@ from qtpy.QtWidgets import qApp, QApplication, QFileDialog, QMainWindow, QMessag
 
 from gensim import corpora, models, similarities
 from collections import Counter
+import numpy as np
 
 from doctopic import MyCorpus, load_from_folder, file_to_query, build_index, merge_labels, iter_documents, TEMP_FOLDER, load_labels
 
@@ -81,6 +82,65 @@ class MyWindow(QMainWindow):
                 w.textOutput.setText('UnboundLocalError: Unable to find local variable')
                 return None
 
+
+    def run_index_query(self):
+        """ Run cross-comparison on checked files."""
+
+        w.textOutput_index.clear()
+        w.load_model()
+        msk = np.zeros(len(w.labels), dtype='bool')
+
+        # Retrieve index number of files checked in the tree view
+        idx = w.get_checked()
+        # Create a boolean mask from indeces
+        for i in idx:
+            msk[i] = True
+
+        sections = [' LSI Similarity ', ' Most Prominent LSI topic ', ' tf-idf Similarity ']
+        headers = '{:<5s}{:>8s}{:>20s}{:>20s}{:>27s}'.format('RANK', 'SIM', 'CLIENT', 'PROJECT', 'FILE')
+        line = 120
+        dashed = '{:-{align}{width}}'.format('', align='^', width=line)
+
+        for i in idx:
+            w.textOutput_index.append('Printing results for {}'.format(w.labels[str(i)]))
+
+            # Apply mask on indexed file
+            sims_lsi = list(w.lsi_index)[i][msk]
+            sims_tfidf = list(w.tfidf_index)[i][msk]
+
+            # Add index number to scores for reference purposes
+            sims_lsi = zip(sims_lsi, idx)
+            sims_tfidf = zip(sims_tfidf, idx)
+
+            # Sort tuples by score
+            sims_lsi = sorted(sims_lsi, key=lambda item: -item[0])
+            sims_tfidf = sorted(sims_tfidf, key=lambda item: -item[0])
+
+            w.textOutput_index.append('{:-{align}{width}}'.format(sections[0], align='^', width=line))
+            w.textOutput_index.append(headers)
+            w.textOutput_index.append(dashed)
+
+            for j in range(len(sims_lsi)):
+                # load label from
+                labels = w.labels[str(sims_lsi[j][1])]
+
+                w.textOutput_index.append('{:<10d}{: 8.3f}\t{:>14.12}{:>14.12}\t{:<12s}'
+                                          .format(j + 1, sims_lsi[j][0], labels[0], labels[1], labels[-1]))
+
+            w.textOutput_index.append('\n')
+            w.textOutput_index.append('{:-{align}{width}}'.format(sections[2], align='^', width=line))
+            w.textOutput_index.append(headers)
+            w.textOutput_index.append(dashed)
+
+            for j in range(len(sims_tfidf)):
+                labels = w.labels[str(sims_tfidf[j][1])]
+
+                w.textOutput_index.append(
+                    '{:<10d}{: 8.3f}\t{:>14.12}{:>14.12}\t{:<12s}'
+                    .format(j + 1, sims_tfidf[j][0], labels[0], labels[1], labels[-1]))
+            w.textOutput_index.append('\n')
+
+
     @staticmethod
     def run_query():
         """Run query against model."""
@@ -143,10 +203,10 @@ class MyWindow(QMainWindow):
         for key, count in p_cnt.items():
             p_dict[key] = QTreeWidgetItem(c_dict[key[0]], [key[1], str(count)])
             p_dict[key].setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
-            p_dict[key].setCheckState(0, Qt.Unchecked)
+            # p_dict[key].setCheckState(0, Qt.Unchecked)
         # Add file children to project items
         for key in f_cnt.keys():
-            f_dict[key] = QTreeWidgetItem(p_dict[key[:2]], [key[2][0], "", str(key[2][1])])
+            f_dict[key] = QTreeWidgetItem(p_dict[key[:2]], [key[2][0], "", key[2][1]])
             f_dict[key].setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
             f_dict[key].setCheckState(0, Qt.Unchecked)
 
@@ -159,12 +219,13 @@ class MyWindow(QMainWindow):
         while iterator.value():
             item = iterator.value()
             if item.checkState(0) == Qt.Checked:
-                idx.append(item.text(2))
+                # Convert string index to integer and add to list
+                idx.append(int(item.text(2)))
             iterator += 1
-        print(idx)
-        # return idx
 
-    def print_details(self, sims, sims_tfidf, topic):
+        return sorted(idx)
+
+    def print_details(self, sims_lsi, sims_tfidf, topic):
         """Print query results to text output."""
 
         sections = [' LSI Similarity ', ' Most Prominent LSI topic ', ' tf-idf Similarity ']
@@ -176,10 +237,10 @@ class MyWindow(QMainWindow):
         self.textOutput.append(headers)
         self.textOutput.append(dashed)
 
-        for i in range(min(len(sims), 10)):
-            labels = w.labels[str(sims[i][0])]
+        for i in range(min(len(sims_lsi), 10)):
+            labels = w.labels[str(sims_lsi[i][0])]
             self.textOutput.append('{:<10d}{: 8.3f}\t{:>14.12}{:>14.12}\t{:<12s}'
-                                   .format(i + 1, sims[i][1], labels[0], labels[1], labels[-1]))
+                                   .format(i + 1, sims_lsi[i][1], labels[0], labels[1], labels[-1]))
 
         self.textOutput.append('\n')
         self.textOutput.append('{:-{align}{width}}'.format(sections[1], align='^', width=line))
@@ -357,6 +418,6 @@ if __name__ == '__main__':
     w.train_model_button.clicked.connect(MyWindow.train_model)
     w.save_model_button.clicked.connect(MyWindow.save_model)
     w.load_tree_button.clicked.connect(MyWindow.load_tree)
-    w.dummy_button.clicked.connect(MyWindow.get_checked)
+    w.dummy_button.clicked.connect(MyWindow.run_index_query)
 
     sys.exit(app.exec_())

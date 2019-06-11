@@ -81,13 +81,13 @@ class MyCorpus(object):
             client = os.path.split(os.path.split(root)[0])[1]
             project = os.path.split(root)[1]
             for file in filter(lambda file: file.endswith('.txt'), files):
-                labels[str(idx)] = [client, project, file]
+                labels[idx] = [client, project, file]
                 idx += 1
 
             for file in filter(lambda file: file.endswith('.zip'), files):
                 with zipfile.ZipFile(os.path.join(root, file), 'r') as doczip:
                     for name in doczip.namelist():
-                        labels[str(idx)] = [client, project, name]
+                        labels[idx] = [client, project, name]
                         idx += 1
 
         # save labels to file
@@ -96,7 +96,7 @@ class MyCorpus(object):
         return labels
 
 
-def build_index(corpus, num_features, fp):
+def build_index(fp, corpus, num_features):
     """Build indices for different models.
 
     Args:
