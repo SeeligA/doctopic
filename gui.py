@@ -5,37 +5,37 @@ import shutil
 
 from qtpy import QtCore, uic
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import qApp, QApplication, QFileDialog, QMainWindow, QMessageBox, QTreeWidgetItem, QHeaderView, QTreeWidgetItemIterator
+from qtpy.QtWidgets import qApp, QApplication, QFileDialog, QMainWindow, QMessageBox, QTreeWidgetItem, QHeaderView, \
+    QTreeWidgetItemIterator
 
 from gensim import corpora, models, similarities
 from collections import Counter
 import numpy as np
 
-from doctopic import MyCorpus, load_from_folder, file_to_query, build_index, merge_labels, iter_documents, TEMP_FOLDER, load_labels
-
+from doctopic import MyCorpus, load_from_folder, file_to_query, build_index, merge_labels, iter_documents, TEMP_FOLDER
 
 
 class MyWindow(QMainWindow):
 
     def __init__(self):
         super(MyWindow, self).__init__()
-        self.initUI()
+        self.init_ui()
         # Load settings
         self.settings = QtCore.QSettings("DocFirm Inc.", "docfind")
         # Retrieve user input from settings
         save_folder = self.settings.value("savedFolder", "")
         self.input_line_edit_model.setText(save_folder)
-        save_doc = self.settings.value("savedDoc", "")
-        #self.input_line_edit_query.setText(save_doc)
+        # save_doc = self.settings.value("savedDoc", "")
+        # self.input_line_edit_query.setText(save_doc)
         # Write new user input to settings
         self.input_line_edit_model.textChanged.connect(self.new_folder_changed)
-        #self.input_line_edit_query.textChanged.connect(self.new_doc_changed)
+        # self.input_line_edit_query.textChanged.connect(self.new_doc_changed)
 
     def new_folder_changed(self, newFolder):
         """Store dirpath to settings"""
         self.settings.setValue("savedFolder", w.input_line_edit_model.text())
 
-    def initUI(self):
+    def init_ui(self):
 
         uic.loadUi(os.path.join('GUI', 'doctopic.ui'), self)
         self.setWindowTitle('DocTopic')
@@ -44,9 +44,9 @@ class MyWindow(QMainWindow):
 
         self.show()
 
-    def new_doc_changed(self):
-        """Store filepath to settings"""
-        #self.settings.setValue("savedDoc", w.input_line_edit_query.text())
+    # def new_doc_changed(self):
+        # """Store filepath to settings"""
+        # self.settings.setValue("savedDoc", w.input_line_edit_query.text())
 
     @staticmethod
     def open_model():
@@ -81,7 +81,6 @@ class MyWindow(QMainWindow):
             if not all((w.lsi, w.dictionary, w.tfidf, w.tfidf_index, w.lsi_index, w.labels, w.corpus)):
                 w.textOutput.setText('UnboundLocalError: Unable to find local variable')
                 return None
-
 
     def run_index_query(self):
         """ Run cross-comparison on checked files."""
@@ -140,7 +139,6 @@ class MyWindow(QMainWindow):
                     .format(j + 1, sims_tfidf[j][0], labels[0], labels[1], labels[-1]))
             w.textOutput_index.append('\n')
 
-
     @staticmethod
     def run_query():
         """Run query against model."""
@@ -175,7 +173,6 @@ class MyWindow(QMainWindow):
             else:
                 w.textOutput.setText('{} not found. Please select a valid file.'.format(basename))
 
-
     def load_tree(self):
         """Build a index tree view from labels items."""
 
@@ -198,7 +195,7 @@ class MyWindow(QMainWindow):
         for key, count in c_cnt.items():
             c_dict[key] = QTreeWidgetItem(w.treeWidget, [key, str(count)])
             c_dict[key].setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
-            c_dict[key].setExpanded(1)
+            c_dict[key].setExpanded(True)
         # Add project children to client items
         for key, count in p_cnt.items():
             p_dict[key] = QTreeWidgetItem(c_dict[key[0]], [key[1], str(count)])
@@ -345,6 +342,7 @@ class MyWindow(QMainWindow):
                 cnt = merge_labels(dst)
                 w.textOutput_train.setText('{} documents added!'.format(cnt))
                 w.save_model_button.setDisabled(True)
+                w.reset_model()
             else:
                 pass
 
@@ -376,7 +374,6 @@ class MyWindow(QMainWindow):
         src = TEMP_FOLDER
         files = os.listdir(src)
 
-        cnt = 0
         for file in files:
             fp = os.path.join(src, file)
             fp_new = os.path.join(dst, file)
@@ -394,13 +391,11 @@ class MyWindow(QMainWindow):
                 # Copy file to model parameters dir
                 shutil.copy2(fp, fp_new)
 
-            # Increment file count
-            cnt += 1
             logging.info('Copying {} to {}'.format(file, dst))
             # Remove file in temporary folder
             os.unlink(fp)
 
-        w.textOutput_train.append('{} files saved'.format(cnt))
+        w.textOutput_train.append('{} files saved'.format(len(files)))
         w.save_model_button.setDisabled(True)
 
 

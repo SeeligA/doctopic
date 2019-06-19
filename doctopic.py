@@ -1,12 +1,12 @@
 from gensim import corpora, models, similarities, utils
-from gensim.test.utils import get_tmpfile
+
 import os
 import tempfile
 import json
-# from smart_open import open
+from smart_open import open
 import logging
 import zipfile
-from contextlib import contextmanager
+import random
 
 
 TEMP_FOLDER = tempfile.mkdtemp()
@@ -61,51 +61,23 @@ class MyCorpus(object):
         lsi.save(os.path.join(TEMP_FOLDER, 'tmp.lsi'))
         return tfidf, corpus_tfidf, lsi, corpus_lsi
 
-    def build_lda(self, topics=10, passes=100):
-
-        lda = models.LdaModel(corpus, id2word=self.dictionary, num_topics=topics, passes=passes)
-        tfidf.save(os.path.join(TEMP_FOLDER, 'tmp.tfidf'))
-        return lda[self]
-
-    def get_labels(self):
-        """
-        Retrieve document ids with filename and directory for reference purposes.
-
-        Returns:
-            labels: dict() in JSON format with integer ids mapped to list entries
-        """
-
-        idx = 0
-        labels = {}
-        for root, dirs, files in os.walk(self.top_dir):
-            client = os.path.split(os.path.split(root)[0])[1]
-            project = os.path.split(root)[1]
-            for file in filter(lambda file: file.endswith('.txt'), files):
-                labels[idx] = [client, project, file]
-                idx += 1
-
-            for file in filter(lambda file: file.endswith('.zip'), files):
-                with zipfile.ZipFile(os.path.join(root, file), 'r') as doczip:
-                    for name in doczip.namelist():
-                        labels[idx] = [client, project, name]
-                        idx += 1
-
-        # save labels to file
-        save_labels(labels, os.path.join(TEMP_FOLDER, 'tmp.json'))
-
-        return labels
+    # def build_lda(self, topics=10, passes=100):
+    #
+    #     lda = models.LdaModel(corpus, id2word=self.dictionary, num_topics=topics, passes=passes)
+    #     tfidf.save(os.path.join(TEMP_FOLDER, 'tmp.tfidf'))
+    #     return lda[self]
 
 
 def build_index(fp, corpus, num_features):
     """Build indices for different models.
 
     Args:
+        fp: path/to/file
         corpus: either a regular MyCorpus object or a transformation
         num_features: number of dimensions required for creating sparse vectors
-        fp: path/to/file
 
     Returns:
-        index: index of documents comprised in a corpus
+        index of documents comprised in a corpus
     """
 
     return similarities.Similarity(fp, corpus, num_features)
@@ -127,19 +99,26 @@ def iter_documents(top_directory):
     labels = {}
 
     for root, dirs, files in os.walk(top_directory):
+
+        # Shuffle so that client dirs are picked at random and project dirs within a client dir are processed in a
+        # random sequence
+        random.seed(2)
+        dirs = random.shuffle(dirs)
+
         client = os.path.split(os.path.split(root)[0])[1]
         project = os.path.split(root)[-1]
         logging.debug(client)
         logging.debug(project)
 
         for file in filter(lambda file: file.endswith('.txt'), files):  # TODO: Add filter for PDF files
-
+            logging.info(os.path.join(root, file))
             try:
                 with open(os.path.join(root, file), 'rb') as document:
                     logging.debug(file)
 
                     document = document.read()  # read the entire document, as one big string
                     labels[str(idx)] = [client, project, file]
+                    logging.debug([idx, client, project, file])
                     idx += 1
                     yield tokenize(document)  # or whatever tokenization suits you
             except UnicodeDecodeError:
@@ -149,7 +128,7 @@ def iter_documents(top_directory):
         for file in filter(lambda file: file.endswith('.zip'), files):
             with zipfile.ZipFile(os.path.join(root, file), 'r') as doczip:
                 for name in doczip.namelist():
-                    logging.debug(name)
+
                     if name.endswith('.txt'):
                         try:
                             with doczip.open(name) as document:
@@ -194,12 +173,12 @@ def load_labels(fp):
 
 
 def merge_labels(fp):
-    """Merge model labels with training doc labels
+    """Merge model labels with training doc labels.
 
     Args:
         fp: path to model parameters
     Returns:
-        None
+        Labels count for information purposes
     """
     fp = os.path.join(fp, 'tmp.json')
 
