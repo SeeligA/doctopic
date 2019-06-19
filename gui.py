@@ -1,18 +1,19 @@
-import sys
 import logging
 import os.path
-import shutil
+import sys
+from collections import Counter
+
+import numpy as np
 
 from qtpy import QtCore, uic
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import qApp, QApplication, QFileDialog, QMainWindow, QMessageBox, QTreeWidgetItem, QHeaderView, \
     QTreeWidgetItemIterator
 
-from gensim import corpora, models, similarities
-from collections import Counter
-import numpy as np
+from sources.doctopic import MyCorpus, load_from_folder, file_to_query, build_index, merge_labels, iter_documents, \
+    update_indices, TEMP_FOLDER
 
-from doctopic import MyCorpus, load_from_folder, file_to_query, build_index, merge_labels, iter_documents, TEMP_FOLDER
+from sources.utils import make_model_archive, move_from_temp
 
 
 class MyWindow(QMainWindow):
@@ -75,12 +76,11 @@ class MyWindow(QMainWindow):
         # Load relevant files from model directory
         else:
             logging.info('Loading model parameters')
-            w.lsi, w.dictionary, w.tfidf, w.tfidf_index, w.lsi_index, w.labels, w.corpus = load_from_folder(
-                w.input_line_edit_model.text())
-            # Abort query if one or more files are missing
-            if not all((w.lsi, w.dictionary, w.tfidf, w.tfidf_index, w.lsi_index, w.labels, w.corpus)):
-                w.textOutput.setText('UnboundLocalError: Unable to find local variable')
-                return None
+            params = ['lsi', 'dictionary', 'tfidf', 'tfidf_index', 'lsi_index', 'labels', 'corpus']
+            load = load_from_folder(params, w.input_line_edit_model.text())
+
+            for k, v in load.items():
+                setattr(w, k, v)
 
     def run_index_query(self):
         """ Run cross-comparison on checked files."""
@@ -297,49 +297,13 @@ class MyWindow(QMainWindow):
         src = w.input_line_edit_train.text()
         if os.path.isdir(dst) and os.path.isdir(src):
 
+            # Prompt user before updating indices
             dialog = QMessageBox.question(w, 'DocTopic', 'This operation will change your search indices. Continue?',
                                           QMessageBox.Save | QMessageBox.Cancel, QMessageBox.Cancel)
             if dialog == QMessageBox.Save:
 
-                # Load dictionary and create corpus
-                dictionary = corpora.Dictionary.load(os.path.join(dst, 'tmp.dict'))
-                # Create list of BOW from training documents
-                train_corpus = [dictionary.doc2bow(tokens) for tokens in iter_documents(src)]
+                cnt = update_indices(src, dst)
 
-                corpora.MmCorpus.serialize(os.path.join(TEMP_FOLDER, 'tmp.mm'), train_corpus)
-                train_corpus = corpora.MmCorpus(os.path.join(TEMP_FOLDER, 'tmp.mm'))
-
-
-                # Fold training dictionary into model dictionary
-                #train_to_dict = dictionary.merge_with(train_dict)
-
-                # Merge corpora
-                #dictionary.save(os.path.join(dst, 'tmp.dict'))
-                #dictionary.save(os.path.join(dst, 'tmp.dict'))
-
-                #trained_corpus = itertools.chain(corpus, train_to_dict[train_corpus])
-
-                # Overwrite model corpus
-                #corpora.MmCorpus.serialize(os.path.join(dst, 'tmp.mm'), trained_corpus)
-
-                # Load pre-trained LSI models
-                tfidf = models.TfidfModel.load(os.path.join(dst, 'tmp.tfidf'))
-                lsi = models.LsiModel.load(os.path.join(dst, 'tmp.lsi'))
-
-                # Load indices
-                lsi_index = similarities.Similarity.load(os.path.join(dst, 'lsi.index'))
-                tfidf_index = similarities.Similarity.load(os.path.join(dst, 'tfidf.index'))
-
-                # Update indices with training corpus
-                lsi_index.add_documents(lsi[tfidf[list(train_corpus)]])
-                tfidf_index.add_documents(tfidf[list(train_corpus)])
-
-                # Save updated indices
-                lsi_index.save(os.path.join(dst, 'lsi.index'))
-                tfidf_index.save(os.path.join(dst, 'tfidf.index'))
-
-                # Update labels and save to file
-                cnt = merge_labels(dst)
                 w.textOutput_train.setText('{} documents added!'.format(cnt))
                 w.save_model_button.setDisabled(True)
                 w.reset_model()
@@ -351,51 +315,21 @@ class MyWindow(QMainWindow):
 
     @staticmethod
     def save_model():
+        """Saving files created during training to model folder."""
 
         dst = w.input_line_edit_model.text()
 
-        files = os.listdir(dst)
-        if len(files) > 0:
-            basename = os.path.join(dst)
-            root = os.path.dirname(dst)
-            basedir = os.path.basename(dst)
-
-            # Create ZIP archive in root directory
-            shutil.make_archive(basename, 'zip', root, basedir)
-            w.textOutput_train.append('Backup of {} folder created here: {}'.format(basedir, root))
-
-            # Remove files in basedir
-            for file in files:
-                os.unlink(os.path.join(dst, file))
-
+        # Check for files in model dir and zip folder if any
+        if os.listdir(dst):
+            archive = make_model_archive(dst)
+            w.textOutput_train.append('Backup of model folder created here: {}'.format(archive))
         else:
             pass
 
-        src = TEMP_FOLDER
-        files = os.listdir(src)
+        # Copy model files to model folder
+        cnt = move_from_temp(TEMP_FOLDER, dst)
 
-        for file in files:
-            fp = os.path.join(src, file)
-            fp_new = os.path.join(dst, file)
-
-            if file.endswith('lsi.index') or file.endswith('tfidf.index'):
-                index = similarities.Similarity.load(fp)
-                # Set internal path to index
-                index.output_prefix = fp_new
-                # Update path to index shards so that it corresponds to the output_prefix
-                index.check_moved()
-                # Save index with updated paths to file
-                index.save(fp_new)
-
-            else:
-                # Copy file to model parameters dir
-                shutil.copy2(fp, fp_new)
-
-            logging.info('Copying {} to {}'.format(file, dst))
-            # Remove file in temporary folder
-            os.unlink(fp)
-
-        w.textOutput_train.append('{} files saved'.format(len(files)))
+        w.textOutput_train.append('{} files saved'.format(cnt))
         w.save_model_button.setDisabled(True)
 
 

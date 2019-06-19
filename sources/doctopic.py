@@ -1,13 +1,12 @@
-from gensim import corpora, models, similarities, utils
-
-import os
-import tempfile
 import json
-from smart_open import open
 import logging
-import zipfile
+import os
 import random
+import tempfile
+import zipfile
 
+from gensim import corpora, models, similarities, utils
+from smart_open import open
 
 TEMP_FOLDER = tempfile.mkdtemp()
 
@@ -54,7 +53,7 @@ class MyCorpus(object):
             corpus_lsi: transformation of lsi model and self
         """
 
-        # When building indices from transformed vectors, apply same transformation to search vectors
+        # When building indices from transformed vectors, apply the same transformation to search vectors
         tfidf, corpus_tfidf = self.build_tfidf()
         lsi = models.LsiModel(corpus_tfidf, id2word=self.dictionary, num_topics=topics)
         corpus_lsi = lsi[corpus_tfidf]
@@ -144,26 +143,33 @@ def iter_documents(top_directory):
     save_labels(labels, os.path.join(TEMP_FOLDER, 'tmp.json'))
 
 
-def load_from_folder(folder):
-    lsi, dictionary, tfidf, tfidf_index, lsi_index, labels, corpus = None, None, None, None, None, None, None
-    for file in os.listdir(folder):
-        logging.info('Scanning: {}'.format(file))
-        if file.endswith('.lsi'):
-            lsi = models.LsiModel.load(os.path.join(folder, file))
-        elif file.endswith('.tfidf'):
-            tfidf = models.TfidfModel.load(os.path.join(folder, file))
-        elif file.endswith('.dict'):
-            dictionary = corpora.Dictionary.load(os.path.join(folder, file))
-        elif file.endswith('tfidf.index'):
-            tfidf_index = similarities.Similarity.load(os.path.join(folder, file))
-        elif file.endswith('lsi.index'):
-            lsi_index = similarities.Similarity.load(os.path.join(folder, file))
-        elif file.endswith('.json'):
-            labels = load_labels(os.path.join(folder, file))
-        elif file.endswith('.mm'):
-            corpus = corpora.MmCorpus(os.path.join(folder, file))
+def load_from_folder(params, arg):
+    """Dynamically load parameters from model folder.
 
-    return lsi, dictionary, tfidf, tfidf_index, lsi_index, labels, corpus
+    Arguments:
+        params -- List of required model parameters
+        arg -- path/to/model/parameters
+    Returns:
+        load -- Dictionary of loaded parameters
+    """
+
+    load = dict()
+
+    dispatch = {
+         ('dictionary', 'tmp.dict'): corpora.Dictionary.load,
+         ('tfidf', 'tmp.tfidf'): models.TfidfModel.load,
+         ('lsi', 'tmp.lsi'): models.LsiModel.load,
+         ('tfidf_index', 'tfidf.index'): similarities.Similarity.load,
+         ('lsi_index', 'lsi.index'): similarities.Similarity.load,
+         ('labels', 'tmp.json'): load_labels,
+         ('corpus', 'tmp.mm'): corpora.MmCorpus
+    }
+    # Use dispatch mapping to call load functions for parameters
+    for k, v in dispatch.items():
+        if k[0] in params:
+            load[k[0]] = dispatch[k](os.path.join(arg, k[1]))
+
+    return load
 
 
 def load_labels(fp):
@@ -178,7 +184,7 @@ def merge_labels(fp):
     Args:
         fp: path to model parameters
     Returns:
-        Labels count for information purposes
+        New labels count for information purposes
     """
     fp = os.path.join(fp, 'tmp.json')
 
@@ -204,3 +210,50 @@ def save_labels(labels, fp):
 def tokenize(document):
     # TODO: Replace with custom tokenizer and customizable stop word list
     return utils.tokenize(document, lower=True)
+
+
+def update_indices(src, dst):
+    """Update search indices with additional training documents.
+    This feature is best suited for small updates and models that are already quite balanced.
+    LSI and TFIDF weights will not be updated and the training files will not be included
+    in neither the corpus or the dictionary.
+
+    Arguments:
+        src -- path/to/new/docs
+        dst -- path/to/model
+    Returns:
+        cnt -- New labels count for information purposes
+    """
+
+    # Load model parameters
+    params = ['lsi', 'dictionary', 'tfidf', 'tfidf_index', 'lsi_index']
+    load = load_from_folder(params, dst)
+    lsi, dictionary, tfidf, tfidf_index, lsi_index = map(lambda x: load[x], params)
+
+    # Create list of BOW from training documents
+    train_corpus = [dictionary.doc2bow(tokens) for tokens in iter_documents(src)]
+
+    corpora.MmCorpus.serialize(os.path.join(TEMP_FOLDER, 'tmp.mm'), train_corpus)
+    train_corpus = corpora.MmCorpus(os.path.join(TEMP_FOLDER, 'tmp.mm'))
+
+    # Update indices with training corpus
+    lsi_index.add_documents(lsi[tfidf[list(train_corpus)]])
+    tfidf_index.add_documents(tfidf[list(train_corpus)])
+
+    # Save updated indices
+    lsi_index.save(os.path.join(dst, 'lsi.index'))
+    tfidf_index.save(os.path.join(dst, 'tfidf.index'))
+
+    # Update labels and save to file
+    cnt = merge_labels(dst)
+    return cnt
+
+
+def update_index_path(fp, fp_new):
+    index = similarities.Similarity.load(fp)
+    # Set internal path to index
+    index.output_prefix = fp_new
+    # Update path to index shards so that it corresponds to the output_prefix
+    index.check_moved()
+    # Save index with updated paths to file
+    index.save(fp_new)
