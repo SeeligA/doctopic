@@ -1,4 +1,3 @@
-import logging
 import os
 import os.path
 
@@ -9,9 +8,7 @@ from ipywidgets import Button, Layout, GridspecLayout, GridBox
 from sources.doctopic import (MyCorpus, load_from_folder, data_to_query, build_index, update_indices, TEMP_FOLDER)
 
 from sources.utils import make_model_archive, move_from_temp
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+from sources.log import out, logger
 
 
 class MyControlWidget(GridBox):
@@ -36,7 +33,7 @@ class MyControlWidget(GridBox):
         self.build_tab_grids()
         self.apply_layouts()
 
-        self.children = [self.input_line_edit_model, self.tabs]
+        self.children = [self.input_line_edit_model, self.tabs, out]
 
         self.add_documents_button.on_click(self.add_docs)
         # w.open_model_button.clicked.connect(MyWindow.open_model)
@@ -166,6 +163,12 @@ class MyControlWidget(GridBox):
             print_details(self, sims_lsi, sims_tfidf, topic)
 
     def load_model(self):
+        """Load model parameters.
+
+        This method controls which model files will be loaded from disk and added to the
+        current object as attributes.
+        """
+
         # Check if a model has been already loaded
         if hasattr(self, 'lsi'):
             pass
@@ -259,7 +262,6 @@ class MyControlWidget(GridBox):
             with self.text_output_train:
                 print('Please select a valid training folder!')
 
-
     def open_doc(self, b):
         """Write filepath(s) to list widget."""
 
@@ -273,7 +275,6 @@ class MyControlWidget(GridBox):
         """Store dirpath to settings"""
         self.settings.setValue("savedFolder", self.input_line_edit_model.value)
         self.reset_model()
-
 
     def build_tab_grids(self):
         """Build grids for app tabs."""
@@ -314,16 +315,6 @@ class MyControlWidget(GridBox):
         grid[2, 5] = self.run_query_button
         return grid
 
-
-    @staticmethod
-    def file_selector(placeholder, desc, disabled=False):
-        return widgets.Text(value=None,
-                            placeholder=placeholder,
-                            description=desc,
-                            layout=Layout(width='98.5%', height='30px'),
-                            disabled=disabled
-                            )
-
     def add_docs(self, b):
 
         dst = self.input_line_edit_model.value
@@ -348,7 +339,17 @@ class MyControlWidget(GridBox):
             with self.text_output_train:
                 print('Please select a valid folder')
 
-    def create_expanded_button(self, description, button_style, disabled=False):
+    @staticmethod
+    def file_selector(placeholder, desc, disabled=False):
+        return widgets.Text(value=None,
+                            placeholder=placeholder,
+                            description=desc,
+                            layout=Layout(width='98.5%', height='30px'),
+                            disabled=disabled
+                            )
+
+    @staticmethod
+    def create_expanded_button(description, button_style, disabled=False):
         return Button(description=description,
                       button_style=button_style,
                       disabled=disabled,

@@ -1,6 +1,6 @@
 import os
 import shutil
-import logging
+from sources.log import logger
 
 from sources.doctopic import update_index_path
 
@@ -20,7 +20,7 @@ def move_from_temp(src, dst):
             # Copy file to model parameters dir
             shutil.copy2(fp, fp_new)
 
-        logging.info('Copying {} to {}'.format(file, dst))
+        logger.info('Copying {} to {}'.format(file, dst))
         # Remove file in temporary folder
         os.unlink(fp)
 

@@ -14,6 +14,14 @@ from sources.doctopic import (MyCorpus, load_from_folder, read_file, data_to_que
                               build_index, update_indices, TEMP_FOLDER)
 
 from sources.utils import make_model_archive, move_from_temp
+from sources.log import logger
+
+console_handler = logging.StreamHandler(sys.stdout)
+log_formatter = logging.Formatter('%(asctime)s : %(levelname)s : %(message)s')
+console_handler.setFormatter(log_formatter)
+# Overwrite log_viewer default handler
+logger.addHandler(console_handler)
+logger.setLevel(10)
 
 
 class MyWindow(QMainWindow):
@@ -71,13 +79,18 @@ class MyWindow(QMainWindow):
 
     @staticmethod
     def load_model():
-        """"""
+        """Load model parameters.
+
+        This method controls which model files will be loaded from disk and added to the
+        current object as attributes.
+        """
+
         # Check if a model has been already loaded
         if hasattr(w, 'lsi'):
             pass
         # Load relevant files from model directory
         else:
-            logging.info('Loading model parameters')
+            logger.info('Loading model parameters')
             params = ['lsi', 'dictionary', 'tfidf', 'tfidf_index', 'lsi_index', 'labels', 'corpus']
             load = load_from_folder(params, w.input_line_edit_model.text())
 
@@ -264,7 +277,7 @@ class MyWindow(QMainWindow):
 
         if hasattr(w, 'lsi'):
             del w.lsi
-            logging.info('Model reset')
+            logger.info('Model reset')
 
     @staticmethod
     def train_model():
@@ -272,6 +285,7 @@ class MyWindow(QMainWindow):
         dst = [os.path.join(TEMP_FOLDER, name) for name in ['lsi.index', 'tfidf.index']]
 
         if os.path.isdir(src):
+            logger.info('Starting training…')
             corpus = MyCorpus(src)
             corpus.save_to_temp()
             num_features = len(corpus.dictionary)
@@ -318,7 +332,7 @@ class MyWindow(QMainWindow):
 
     @staticmethod
     def save_model():
-        """Saving files created during training to model folder."""
+        """Saving training output to model folder."""
 
         dst = w.input_line_edit_model.text()
 

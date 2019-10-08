@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import random
 import tempfile
@@ -7,16 +6,11 @@ import zipfile
 
 from gensim import corpora, models, similarities, utils
 #from smart_open import open
+from sources.log import logger
 
 TEMP_FOLDER = tempfile.mkdtemp()
 
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 logger.info('Folder "{}" will be used to save temporary dictionary and corpus.'.format(TEMP_FOLDER))
-
-
 # See: https://github.com/RaRe-Technologies/gensim/wiki/Recipes-&-FAQ
 #      --> Q1 How many times does a feature with id 123 appear in a corpus?
 
@@ -115,7 +109,7 @@ def iter_documents(top_directory):
         logger.debug(project)
 
         for file in filter(lambda file: file.endswith('.txt'), files):  # TODO: Add filter for PDF files
-            logger.info(os.path.join(root, file))
+
             try:
                 with open(os.path.join(root, file), 'rb') as document:
                     logger.debug(file)

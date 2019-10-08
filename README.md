@@ -10,7 +10,7 @@ A topic modelling and similarity retrieval interface that helps you managing you
 * Use unsupervised training algorithms such as _Latent Semantic Analysis_ and _Latent Dirichlet Allocation_ for topic modelling purposes.  
 * Query your corpus to retrieve documents that are structurally similar or belong to a similar domain.
 * Update your search indices with new files so that they can be retrieved later.
-* Use the Jupyter notebook implementation to run the app on a remote server.
+* Use the [Jupyter notebook](doctopic.ipynb "DocTopic Jupyter notebook") implementation to run the app on a remote server.
 
 ## Use cases for translation service providers
 Identify relevant resources from __historical project data__ such as:
