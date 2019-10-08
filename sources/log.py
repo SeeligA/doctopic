@@ -33,9 +33,10 @@ class log_viewer(logging.Handler):
         """ Overload of logging.Handler method """
 
         record = self.format(record)
-        out.outputs = ({'name': 'stdout', 'output_type': 'stream', 'text': (Fore.BLACK + (record + '\n'))},) + out.outputs
+        with out:
+            print(record)
 
 
 logger = logging.getLogger(__name__)
 logger.addHandler(log_viewer(format=logging.Formatter('%(asctime)s : %(levelname)s : %(message)s')))
-logger.setLevel(10)
+logger.setLevel(20)

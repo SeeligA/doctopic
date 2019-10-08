@@ -105,14 +105,11 @@ def iter_documents(top_directory):
 
         client = os.path.split(os.path.split(root)[0])[1]
         project = os.path.split(root)[-1]
-        logger.debug(client)
-        logger.debug(project)
 
         for file in filter(lambda file: file.endswith('.txt'), files):  # TODO: Add filter for PDF files
 
             try:
                 with open(os.path.join(root, file), 'rb') as document:
-                    logger.debug(file)
 
                     document = document.read()  # read the entire document, as one big string
                     labels[str(idx)] = [client, project, file]
